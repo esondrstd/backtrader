@@ -55,7 +55,7 @@ class UserInputs():
 
 	def model_params():
 		params = dict(
-			live_status = True,  #Flip between live trading (True) and backtesting (False)
+			live_status = False,  #Flip between live trading (True) and backtesting (False)
 			start_date = datetime(2020,2,1), #Dates for backtesting
 			end_date = datetime(2020,2,10),
 			t0_on = True,
