@@ -110,12 +110,7 @@ class Strategy(bt.Strategy):
 			)
 			
 	def __init__(self):		
-	
 		"""initialize parameters and variables for Strategy Class"""
-		#ib = IB_Scan()
-		#print(ib.ticker_list_gain)
-		#print(ib.ib_gainers())
-		#self.ibdatalist = ibdatalist_gainers + ibdatalist_losers
 		
 		#Set program start time
 		self.start_time=datetime.now().time()
@@ -284,39 +279,24 @@ class Strategy(bt.Strategy):
 	#*****************************************************************************************************************************
 	def next(self):
 		"""Iterates over each "line" of data (date and ohlcv) provided by data feed"""
-
 		#Convert backtrader float date to datetime so i can see time on printout and manipulate time variables
 		if self.modelp.get('live_status'):
 			self.dt = self.data.num2date()
+			
 		else:
 			self.dt = self.datetime.datetime()
-		
-		#print(self.dt)
+			
+		print(self.dt)
 		self.hour = self.dt.hour
 		self.minute = self.dt.minute
 		self.hourmin = time(self.dt.hour,self.dt.minute)
 		
 		#-------------------STOCK SELECTION BASED ON OPEN CRITERIA-----------------------------------------
-		if self.hour==8 and self.minute==35:
-			self.clear_dicts()
-			
-			if not self.modelp.get('live_status'):
-				self.exit_trade(self.data,'long')  #close positions that may be open from early market close
-				self.exit_trade(self.data,'short')
-				
-				for i, d in enumerate(self.datas):  #Need to iterate over all datas so atr and sizing can be adjusted for multiple time frame user parameters					
-					if d._name == d._name[:-1]+'0' and d._name!='TICK-NYSE0':	
-						self.gap_dict[d._name] = self.inds.get(d._name[:-1]+'0').get('gap')[0]
-
-				self.rank_gap(self.data)
-				self.ticker_list = self.merged_dict.keys()
-				print(self.ticker_list)
-			
-			if self.modelp.get('live_status'):
-				self.ticker_list = self.getdatanames()
-								
+		if self.hour== 8 and self.minute==35:
+			self.initial_open()
+		
 		#Iterate through ranked stocks only
-		if self.hourmin <= self.trade_end:
+		if self.hourmin <= self.trade_end and self.ticker_list:
 			for n in self.ticker_list:
 				d = self.datas_dic.get(n)
 
@@ -340,7 +320,7 @@ class Strategy(bt.Strategy):
 		
 				
 				#---------------------------------ENTRY LOGIC FOR LONG AND SHORT-----------------------------------------
-				if self.hour==8 and self.minute==40 and self.entry_rules(d):  #Check that entry rules are met
+				if self.hour==8 and self.minute==35 and self.entry_rules(d):  #Check that entry rules are met
 					sig = self.gap_revert(d)
 					if sig=='buy':
 						self.buyorder(d)
@@ -350,13 +330,28 @@ class Strategy(bt.Strategy):
 			#--------------------- --------------------------------------------------------------------------------------
 	
 	#*********************************************************************************************************************
+	def initial_open(self):
+		self.clear_dicts()
+		
+		if not self.modelp.get('live_status'):
+			self.exit_trade(self.data,'long')  #close positions that may be open from early market close
+			self.exit_trade(self.data,'short')
+			
+		for i, d in enumerate(self.datas):  #Need to iterate over all datas so atr and sizing can be adjusted for multiple time frame user parameters					
+				if d._name == d._name[:-1]+'0' and d._name!='TICK-NYSE0':	
+					self.gap_dict[d._name] = self.inds.get(d._name[:-1]+'0').get('gap')[0]
+		
+		self.rank_gap(self.data)
+		self.ticker_list = self.merged_dict.keys()
+	
+	
 	def clear_dicts(self):
 		self.short_stop_dict.clear()
 		self.long_stop_dict.clear()
 		self.perc_chg_dict.clear()
 		self.correl_dict.clear()
 	
-				
+			
 	def exit_multiday(self):
 		#Exit trades if multi-day position
 		if self.hour==8 and self.minute==30:
@@ -534,7 +529,7 @@ class Strategy(bt.Strategy):
 		self.merged_dict = {**self.rtop_dict, **self.rbot_dict} 
 		
 		self.sortflag = 1
-		#print(f'{d._name} {self.dt} {self.hour} {self.minute}  Top Sort: {self.rtop_dict}, Bottom Sort: {self.rbot_dict}')
+		print(f'{d._name} {self.dt} {self.hour} {self.minute}  Top Sort: {self.rtop_dict}, Bottom Sort: {self.rbot_dict}')
 		
 		
 	def gap_revert(self,d):
@@ -546,22 +541,13 @@ class Strategy(bt.Strategy):
 		#print(d._name,d.close[0],prior_high,prior_low)
 		#print(d._name,d.open[0],prior_high,prior_low)
 		
-		if self.modelp.get('live_status'):
-			ib = IB_Scan()  #Create object "IB" from IB_Scan class	
-			gap_up = ib.gapup
-			gap_down = ib.gapdown
-			
-			if d._name in gap_down and self.gap_dict.get(d._name) < -3:
-				return 'buy'
-			elif d._name in gap_up and self.gap_dict.get(d._name) > 3:
-				return 'sell'
-			
-		else:
-			if d._name in self.rbot_dict.keys() and self.gap_dict.get(d._name) < -3:
-				return 'buy'
-		
-			elif d._name in self.rtop_dict.keys() and self.gap_dict.get(d._name) > 3:
-				return 'sell'
+		if d._name in self.rbot_dict.keys() and self.gap_dict.get(d._name) < -3:
+			print('BUY BUY BUY')
+			return 'buy'
+	
+		elif d._name in self.rtop_dict.keys() and self.gap_dict.get(d._name) > 3:
+			print('SELL SELL SELL')
+			return 'sell'
 
 
 	def eps(self,d):
@@ -1592,6 +1578,8 @@ class IB_Scan():
 		print (f'Server Error: {msg}')
 	
 	def run_prog(self):
+		
+		global live_ticker_list
 		#Make connection to IB
 		con = ibConnection(host='127.0.0.1', port=7497, clientId=100)
 		con.connect()
@@ -1605,7 +1593,7 @@ class IB_Scan():
 		#Generage next order_id
 		con.register(self.get_valid_order_id,'NextValidId')
 		#con.reqIds(-1) 
-		t.sleep(60)  #Allow for time to get order id from IB
+		t.sleep(5)  #Allow for time to get order id from IB
 
 		#Define scanner parameters
 		self.gappingup_id = self.orderid[0]
@@ -1628,28 +1616,31 @@ class IB_Scan():
 		
 				
 		#Request subscription to scanner
+		print(f'Get Gap Up Subscription')
 		con.reqScannerSubscription(self.gappingup_id,gappingup)
-		t.sleep(30)
+		t.sleep(5)
+		print(f'Get Gap Down Subscription')
 		con.reqScannerSubscription(self.gappingdown_id,gappingdown)
-		t.sleep(30)
+		t.sleep(5)
 		
 		#Cancel scaneer subscription when finished
+		print(f'Cancel Subs')
 		con.cancelScannerSubscription(self.gappingup_id)
-		t.sleep(3)
+		t.sleep(1)
 		con.cancelScannerSubscription(self.gappingdown_id)
-		t.sleep(3)
+		t.sleep(1)
 		
 		#Disconnect from IB when done
 		con.disconnect()
 		
 		#Return ticker_list that meets scanner defined criteria
 		ticker_list = self.gapup + self.gapdown
-		ticker_list = list(OrderedDict.fromkeys(ticker_list)) #remove duplicates if they exist
+		live_ticker_list = list(OrderedDict.fromkeys(ticker_list)) #remove duplicates if they exist
 		print(f'Scan results: Gap Up{self.gapup} Gap Down{self.gapdown}')
 		print(f'All scan results: {ticker_list}')
 		print (f'IB Scan subscription DISCONNECTED')
 		
-		return ticker_list
+		
 				
 #********************************************RUN STRATEGY FUNCTION*********************************************************************
 
@@ -1711,9 +1702,8 @@ def runstrat():
 
 def data_live(cerebro,session_start,session_end,modelp):
 	
-	print(f'Subscribing to IB Market Scanner - determining stocks to trade')
-	ib = IB_Scan()  #Create object "IB" from IB_Scan class	
-	ibdatalist = ib.run_prog()  #get ticker list
+	print(f'Got tickers from IB Scanner, adding to data store - {live_ticker_list}')
+	ibdatalist = live_ticker_list
 	#ibdatalist=('MCRB', 'OMER', 'MGM', 'NKLA', 'FL', 'RETA', 'FBC', 'SOHU', 'TCEHY', 'RKT')
 	#ibdatalist = ('MGM','NKLA','FL','RETA','FBC','SOHU','OMER')
 	
@@ -1729,7 +1719,6 @@ def data_live(cerebro,session_start,session_end,modelp):
 
 	for i,j in enumerate(ibdatalist):
 		#Data for live IB trading
-		
 		data = store.getdata(dataname=j,
 							sectype='STK',
 							exchange='SMART',
@@ -1863,7 +1852,7 @@ def open_IB():
 	while current_time < hourmin or (current_time > time(15,0) and current_time <= time(23,59,59)):
 		current_time = time(datetime.now().hour,datetime.now().minute,datetime.now().second)
 		print(f'{current_time} - Waiting to open Interactive Brokers @ {target_time}')
-		t.sleep(30)  #Wait 1 minute after open to allow prices to populate
+		t.sleep(10)  #Wait 1 minute after open to allow prices to populate
 	
 	subprocess.Popen('C:\\Jts\\tws.exe')
 
@@ -1877,6 +1866,7 @@ def open_IB():
 	pyautogui.press('enter')
 	print(f'IB Open Complete - IB Now Available')
 	
+
 
 def profile():
 	import cProfile
@@ -1915,10 +1905,17 @@ if __name__ == '__main__':
 		thread = threading.Thread(target=open_IB)
 		thread.start()  #start thread (rest of program remains idle until thread complete)
 		thread.join()#wait here for the result to be available before continuing
-
+		
+		#Calculate IB Scanners
+		ib = IB_Scan()  #Create object "IB" from IB_Scan class	
+		scanner_thread = threading.Thread(target=ib.run_prog())  #get ticker list
+		scanner_thread.start()
+		scanner_thread.join()
+		
 		#Run strategy
 		runstrat()
+		
 	else:
-		profile()
-		#runstrat()
+		#profile()
+		runstrat()
 		
